@@ -1,0 +1,9 @@
+services:
+  api:
+    build: .
+    container_name: elevateu-server
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
