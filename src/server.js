@@ -1,20 +1,20 @@
 // server
-import './src/cron/deleteReadedMessages.js'
+import './cron/deleteReadedMessages.js'
 import http from 'http'
 import express from 'express'
 import 'dotenv/config'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import connectDB from './src/config/db.js'
+import connectDB from './config/db.js'
 
-import userRouter from './src/routes/user.js'
-import tutorRouter from './src/routes/tutor.js'
-import adminRouter from './src/routes/admin.js'
-import commonRouter from './src/routes/common.js'
+import userRouter from './routes/user.js'
+import tutorRouter from './routes/tutor.js'
+import adminRouter from './routes/admin.js'
+import commonRouter from './routes/common.js'
 
-import {errorHandler,notFound} from './src/middleware/errorHandling.js'
-import passport from './src/config/passport.js'
-import { initializeSocket } from './src/services/socketServer.js'
+import {errorHandler,notFound} from './middleware/errorHandling.js'
+import passport from './config/passport.js'
+import { initializeSocket } from './services/socketServer.js'
 
 connectDB();
 

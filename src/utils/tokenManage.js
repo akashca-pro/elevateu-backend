@@ -14,13 +14,15 @@ export const clearToken = async (res, accessTokenName, refreshTokenName) => {
         httpOnly: true, 
         secure: process.env.NODE_ENV === "production", 
         sameSite: "Strict", 
-        expires: new Date(0) 
+        expires: new Date(0),
+        COOKIE_DOMAIN : process.env.COOKIE_DOMAIN || 'elevateu.site',
     });
     res.cookie(refreshTokenName, "", { 
         httpOnly: true, 
         secure: process.env.NODE_ENV === "production", 
         sameSite: "Strict", 
-        expires: new Date(0) 
+        expires: new Date(0),
+        COOKIE_DOMAIN : process.env.COOKIE_DOMAIN || 'elevateu.site',
     });
 };
 
