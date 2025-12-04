@@ -1,0 +1,36 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build & Push Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/elevateu-backend:latest .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/elevateu-backend:latest
+
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy mern-backend \
+            --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mern-backend:latest \
+            --region asia-south1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080
