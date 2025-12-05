@@ -28,9 +28,9 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy mern-backend \
-            --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mern-backend:latest \
-            --region asia-south1 \
+          gcloud run deploy elevateu-backend \
+            --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/elevateu-backend:latest \
+            --region us-central1 \
             --platform managed \
             --allow-unauthenticated \
-            --port 8080
+            --port 9000
