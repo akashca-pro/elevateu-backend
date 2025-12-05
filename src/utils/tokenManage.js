@@ -1,28 +1,38 @@
 import 'dotenv/config'
 
-export const sendToken = async(res,name,value,age)=>{
-    res.cookie(name,value,{
+// Helper function to get consistent cookie options based on environment
+export const getCookieOptions = () => {
+    // In development/HTTP, secure must be false. In production/HTTPS, secure should be true
+    const isProduction = process.env.NODE_ENV === 'production';
+    const secure = isProduction;
+    // sameSite: "none" requires secure: true. Use "lax" for HTTP/development
+    const sameSite = secure ? "none" : "lax";
+    // Domain should be undefined for localhost/development, or set for production
+    const domain = isProduction ? (process.env.domain ?? undefined) : undefined;
+    
+    return {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "Strict",
-        maxAge: age
-   })
+        secure: secure,
+        sameSite: sameSite,
+        domain: domain,
+        path: "/",
+    };
+};
+
+
+export const sendToken = async (res, name, value, age) => {
+    res.cookie(name, value, {
+        ...getCookieOptions(),
+        maxAge: age,
+    })
 }
 
 export const clearToken = async (res, accessTokenName, refreshTokenName) => {
-    res.cookie(accessTokenName, "", { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === "production", 
-        sameSite: "Strict", 
+    const baseOptions = {
+        ...getCookieOptions(),
         expires: new Date(0),
-        COOKIE_DOMAIN : process.env.COOKIE_DOMAIN || 'elevateu.site',
-    });
-    res.cookie(refreshTokenName, "", { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === "production", 
-        sameSite: "Strict", 
-        expires: new Date(0),
-        COOKIE_DOMAIN : process.env.COOKIE_DOMAIN || 'elevateu.site',
-    });
-};
+    }
 
+    res.cookie(accessTokenName, "", baseOptions)
+    res.cookie(refreshTokenName, "", baseOptions)
+}
