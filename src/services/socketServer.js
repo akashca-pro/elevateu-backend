@@ -6,8 +6,16 @@ const connectedUsers = {};
 export const initializeSocket = (server) =>{
     const io = new Server(server, {
         cors : {
-            origin : process.env.CLIENT_URL,
-            methods : ['GET','POST']
+            origin : [process.env.CLIENT_URL, process.env.CLIENT_URL_2],
+            credentials: true,
+            methods : ['GET','POST'],
+            maxHttpBufferSize: 1e8, // 100 MB max buffer
+            pingTimeout: 60000,
+            pingInterval: 25000,
+            transports: ['websocket'],
+            allowUpgrades: true,
+            perMessageDeflate: false,
+            httpCompression: false, 
         }
     })
 
