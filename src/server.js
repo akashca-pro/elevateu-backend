@@ -31,9 +31,12 @@ app.use((req, res, next) => {
 app.use(passport.initialize())
 
 app.use(cors({
-    credentials : true,
-    origin : [process.env.CLIENT_URL,process.env.CLIENT_URL_2]
-}))
+  origin: [process.env.CLIENT_URL, process.env.CLIENT_URL_2],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT','PATCH','DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Set-Cookie'],
+}));
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
