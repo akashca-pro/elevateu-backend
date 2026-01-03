@@ -12,7 +12,7 @@ let message=err.message;
 //cast error
 if(err.name==='CastError' && err.kind==='ObjectId'){
     statusCode=404;
-    message='Resourse not found'
+    message='Resource not found'
 }
 res.status(statusCode).json({
     message,

@@ -2,9 +2,12 @@
 import './cron/deleteReadedMessages.js'
 import http from 'http'
 import express from 'express'
+import mongoose from 'mongoose'
 import 'dotenv/config'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
+import helmet from 'helmet'
+import mongoSanitize from 'express-mongo-sanitize'
 import connectDB from './config/db.js'
 
 import userRouter from './routes/user.js'
@@ -16,9 +19,13 @@ import {errorHandler,notFound} from './middleware/errorHandling.js'
 import passport from './config/passport.js'
 import { initializeSocket } from './services/socketServer.js'
 
-connectDB();
+// Connect to database with error handling
+connectDB().catch(err => {
+    console.error('Failed to connect to MongoDB:', err.message);
+    process.exit(1);
+});
 
-const app= express()
+const app = express()
 const server = http.createServer(app);
 
 const io = initializeSocket(server);
@@ -27,6 +34,10 @@ app.use((req, res, next) => {
     req.io = io;
     next();
 });
+
+// Security middleware
+app.use(helmet());
+app.use(mongoSanitize());
   
 app.use(passport.initialize())
 
@@ -38,13 +49,21 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie'],
 }));
 
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
+// Improved health check with database status
+app.get("/health", async (req, res) => {
+  const dbState = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  res.status(200).json({ 
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    database: dbState,
+    uptime: process.uptime()
+  });
 });
 
+// Request size limits for security
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.urlencoded({extended : true}));
+app.use(express.urlencoded({ extended: true }));
 
 // Common routes
 app.use('/api',commonRouter)
@@ -62,6 +81,29 @@ app.use('/api/admin',adminRouter)
 app.use(notFound)
 app.use(errorHandler)
 
-server.listen(process.env.PORT || 9000,()=>{
-    console.log(`Server started on http://localhost:${process.env.PORT}`)
+const PORT = process.env.PORT || 9000;
+
+server.listen(PORT, () => {
+    console.log(`Server started on http://localhost:${PORT}`)
 })
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully');
+    server.close(() => {
+        mongoose.connection.close(false).then(() => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received. Shutting down gracefully');
+    server.close(() => {
+        mongoose.connection.close(false).then(() => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});

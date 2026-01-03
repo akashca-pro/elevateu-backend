@@ -242,7 +242,7 @@ export const deleteCourse = async (req,res) => {
         if(!course) 
             return ResponseHandler.error(res, STRING_CONSTANTS.DATA_NOT_FOUND, HttpStatus.NOT_FOUND);
         
-        await Tutor.findByIdAndUpdate(tutorId, { $inc : { $courseCount : -1 } })
+        await Tutor.findByIdAndUpdate(tutorId, { $inc : { courseCount : -1 } })
         
         const isCourseEnrolled = await EnrolledCourse.findOne({ courseId })
         

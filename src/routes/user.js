@@ -11,6 +11,7 @@ import {addToCart, enrollInCourse, getCartDetails, loadEnrolledCourses} from '..
 
 import {verifyAccessToken,} from '../utils/verifyToken.js'
 import { validateForm } from '../middleware/validation.js'
+import { loginLimiter } from '../middleware/rateLimiting.js'
 
 import { updateEmail, verifyEmail , isBlock, updatePassword, verifyOtpForPasswordChange, resendOtpForPasswordChange, softDeleteUser} from '../controllers/commonControllers.js';
 
@@ -28,7 +29,7 @@ const router =  express.Router();
 // Auth routes
 
 router.post('/signup',validateForm('user','register'),registerUser)
-router.post('/login',validateForm('user','login'),loginUser)
+router.post('/login', loginLimiter, validateForm('user','login'),loginUser)
 router.post('/forgot-password',forgotPassword)
 router.post('/reset-password',verifyResetLink)
 router.delete('/logout',logoutUser)

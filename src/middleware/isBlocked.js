@@ -1,11 +1,11 @@
 import Admin from "../model/admin.js";
 import Tutor from "../model/tutor.js";
 import User from "../model/user.js";
-import ResponseHandler from "../../utils/responseHandler.js";
-import HttpStatus from "../../utils/statusCodes.js";
-import { STRING_CONSTANTS } from "../../utils/stringConstants.js";
+import ResponseHandler from "../utils/responseHandler.js";
+import HttpStatus from "../utils/statusCodes.js";
+import { STRING_CONSTANTS } from "../utils/stringConstants.js";
 
-const roleModals = {
+const roleModels = {
     user : User,
     tutor : Tutor,
     admin : Admin
@@ -14,11 +14,11 @@ const roleModals = {
 export const isBlocked = (role) => async (req,res,next) => {
     
     try {
-        const Model = roleModals[role]
+        const Model = roleModels[role]
         const id = req[role].id;
         const user = await Model.findById(id)
         if(!user)
-            return ResponseHandler.success(res, STRING_CONSTANTS.BLOCKED, HttpStatus.OK);
+            return ResponseHandler.error(res, STRING_CONSTANTS.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
 
         if(user.isBlocked)
             return ResponseHandler.error(res, STRING_CONSTANTS.BLOCKED, HttpStatus.FORBIDDEN); 

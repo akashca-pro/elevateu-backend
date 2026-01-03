@@ -104,7 +104,13 @@ export const intiateWithdrawalRequest = async (req,res) => {
         return ResponseHandler.success(res, STRING_CONSTANTS.REQUEST_WITHDRAWAL_SUCCESS, HttpStatus.OK);
 
     } catch (error) {
-        console.log(STRING_CONSTANTS.SERVER,error);
+        console.log(STRING_CONSTANTS.SERVER, error.message);
+        
+        // Handle Mongoose validation errors and return them to client
+        if (error.name === 'ValidationError' || error.message.includes('required')) {
+            return ResponseHandler.error(res, error.message, HttpStatus.BAD_REQUEST);
+        }
+        
         return ResponseHandler.error(res, STRING_CONSTANTS.SERVER, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 

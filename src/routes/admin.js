@@ -19,6 +19,7 @@ import {loadPendingRequest, deleteCourse, loadCourses, assignCategory, approveOr
 import {refreshAccessToken, verifyAccessToken,verifyRefreshToken} from '../utils/verifyToken.js'
 import { loadNotifications, readNotifications } from '../controllers/notificationController.js'
 import { validateForm } from '../middleware/validation.js'
+import { loginLimiter } from '../middleware/rateLimiting.js'
 import { createCoupon, deleteCoupon, loadCoupons, updateCoupons } from '../controllers/admin/adminCouponOps.js'
 import { loadOrderDetails } from '../controllers/order/adminOrderOps.js'
 import { adminWithdrawAmount, approveOrRejectWithdrawRequest, loadWalletDetails, loadWithdrawRequests } from '../controllers/transactions.js'
@@ -29,8 +30,8 @@ const router = express.Router()
 
 // Auth routes
 
-router.post('/signup',validateForm('admim','register'),registerAdmin);
-router.post('/login',validateForm('admin','login'),loginAdmin);
+router.post('/signup',validateForm('admin','register'),registerAdmin);
+router.post('/login', loginLimiter, validateForm('admin','login'),loginAdmin);
 router.delete('/logout',logoutAdmin)
 router.patch('/refresh-token',verifyRefreshToken('Admin'),refreshAccessToken)
 

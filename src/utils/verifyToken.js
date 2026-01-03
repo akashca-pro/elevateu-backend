@@ -8,6 +8,7 @@ import ResponseHandler from './responseHandler.js';
 import { STRING_CONSTANTS } from './stringConstants.js';
 import RefreshToken from '../model/refreshToken.js';
 import { generateAccessToken, generateRefreshToken } from './generateToken.js';
+import { sendToken } from './tokenManage.js';
 
 const TOKEN_NAMES = {
     user: process.env.USER_ACCESS_TOKEN_NAME,
@@ -21,13 +22,13 @@ const REFRESH_TOKEN = {
     admin : process.env.ADMIN_REFRESH_TOKEN_NAME
 }
 
-const roleModals = {
+const roleModels = {
     user : User,
     tutor : Tutor,
     admin : Admin
 }
 
-const getRoleModel = (role) => roleModals[role.toLowerCase()];
+const getRoleModel = (role) => roleModels[role.toLowerCase()];
 
 export const verifyAccessToken = (role) => async(req, res, next) => {
     try {
@@ -48,6 +49,10 @@ export const verifyAccessToken = (role) => async(req, res, next) => {
             const db = getRoleModel(role);
     
             const user = await db.findById(decoded.id)
+
+            if (!user) {
+                return ResponseHandler.error(res, STRING_CONSTANTS.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
+            }
             
             if(user.isBlocked && role !== 'admin')
                 return ResponseHandler.error(res,STRING_CONSTANTS.NOT_ALLOWED, HttpStatus.FORBIDDEN)
@@ -75,6 +80,10 @@ export const verifyRefreshToken = (role) => async(req,res,next)=>{
         const db = getRoleModel(role);
 
         const user = await db.findById(id)
+
+        if (!user) {
+            return ResponseHandler.error(res, STRING_CONSTANTS.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
+        }
 
         if(user.isBlocked){
             return ResponseHandler.error(res,STRING_CONSTANTS.BLOCKED, HttpStatus.FORBIDDEN)
@@ -141,20 +150,21 @@ export const saveRefreshToken = async(req,res,role)=>{
 export const refreshAccessToken = async (req,res) => {
    
     try {
-        const {decoded} = req.user;
+        const role = req.role;
+        const decoded = req[role];
         const newAccessToken = generateAccessToken(decoded.id);
 
         const tokenName = TOKEN_NAMES[role.toLowerCase()]
 
-        sendToken(res, tokenName, newAccessToken,1 * 24 * 60 * 60 * 1000)
+        sendToken(res, tokenName, newAccessToken, 1 * 24 * 60 * 60 * 1000)
 
-        await saveRefreshToken(req,res,req.role);
+        await saveRefreshToken(req, res, req.role);
     
         return ResponseHandler.success(res, STRING_CONSTANTS.TOKEN_ISSUED, HttpStatus.OK)
 
     } catch (error) {
-        console.log(STRING_CONSTANTS.TOKEN_ISSUE_ERROR, error);
-        return  ResponseHandler.error(res, STRING_CONSTANTS.TOKEN_ISSUE_ERROR, HttpStatus.INTERNAL_SERVER_ERROR)
+        console.log(STRING_CONSTANTS.TOKEN_ISSUE_ERROR, error.message);
+        return ResponseHandler.error(res, STRING_CONSTANTS.TOKEN_ISSUE_ERROR, HttpStatus.INTERNAL_SERVER_ERROR)
     }
     
 }
