@@ -64,7 +64,7 @@ const courseSchema = new mongoose.Schema(
 
       level: { type: String, enum: ["Beginner", "Intermediate", "Advanced"], default: "Beginner" },
 
-      badge : { type : String }, enum : ['New', 'Best Seller', 'Top Rated', 'Trending'],
+      badge : { type : String, enum : ['New', 'Best Seller', 'Top Rated', 'Trending'] },
 
       modules: {type : [moduleSchema] },
 

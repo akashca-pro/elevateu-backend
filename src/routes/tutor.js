@@ -8,7 +8,7 @@ import {loadProfile,updateProfile,requestVerification
 } from '../controllers/tutor/tutorOps.js'
 
 import { verifyAccessToken} from '../utils/verifyToken.js'
-import {otpLimiter} from '../middleware/rateLimiting.js';
+import { strictLimiter, authLimiter, standardLimiter, readLimiter } from '../middleware/rateLimiting.js';
 import { validateForm } from '../middleware/validation.js'
 
 import { updateEmail, verifyEmail, isBlock, resendOtpForPasswordChange, verifyOtpForPasswordChange, updatePassword, softDeleteUser} from '../controllers/commonControllers.js';
@@ -24,70 +24,816 @@ import { addBankAccountDetails, intiateWithdrawalRequest, loadExistingBankDetail
 
 const router = express.Router()
 
-// Auth routes
+// ==================== AUTH ROUTES ====================
 
-router.post('/signup',validateForm('tutor','register'),registerTutor)
-router.post('/login',validateForm('tutor','login'),loginTutor)
-router.post('/forgot-password',otpLimiter,forgotPassword)
-router.post('/reset-password',verifyResetLink)
-router.delete('/logout',logoutTutor)
+/**
+ * @swagger
+ * /api/tutor/signup:
+ *   post:
+ *     summary: Register a new tutor
+ *     description: Creates a new tutor account. Email must be verified via OTP before registration.
+ *     tags: [Auth - Tutor]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, firstName]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: tutor@example.com
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               firstName:
+ *                 type: string
+ *                 example: John
+ *     responses:
+ *       200:
+ *         description: Tutor registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       409:
+ *         $ref: '#/components/responses/ConflictError'
+ */
+router.post('/signup', authLimiter, validateForm('tutor','register'), registerTutor)
 
-router.get('/google',passport.authenticate('google-tutor',{ scope: ["profile", "email"] }))
+/**
+ * @swagger
+ * /api/tutor/login:
+ *   post:
+ *     summary: Tutor login
+ *     description: Authenticates tutor and sets JWT tokens in HTTP-only cookies
+ *     tags: [Auth - Tutor]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         headers:
+ *           Set-Cookie:
+ *             description: JWT access token cookie
+ *             schema:
+ *               type: string
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: Invalid credentials
+ */
+router.post('/login', strictLimiter, validateForm('tutor','login'), loginTutor)
 
+/**
+ * @swagger
+ * /api/tutor/forgot-password:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Auth - Tutor]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Reset OTP sent
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.post('/forgot-password', strictLimiter, forgotPassword)
 
-router.get('/auth-callback',passport.authenticate('google-tutor',{ session : false , 
-    failureRedirect : '/auth-failure' }),passportCallback);
+/**
+ * @swagger
+ * /api/tutor/reset-password:
+ *   post:
+ *     summary: Reset password with OTP
+ *     tags: [Auth - Tutor]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, otp, newPassword]
+ *             properties:
+ *               email:
+ *                 type: string
+ *               otp:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ */
+router.post('/reset-password', strictLimiter, verifyResetLink)
 
-router.get('/auth-failure',authFailure)
+/**
+ * @swagger
+ * /api/tutor/logout:
+ *   delete:
+ *     summary: Tutor logout
+ *     tags: [Auth - Tutor]
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ */
+router.delete('/logout', logoutTutor)
 
-router.get('/auth-load',verifyAccessToken('tutor'),authLoad)
+/**
+ * @swagger
+ * /api/tutor/google:
+ *   get:
+ *     summary: Initiate Google OAuth login
+ *     tags: [Auth - Tutor]
+ *     responses:
+ *       302:
+ *         description: Redirect to Google OAuth
+ */
+router.get('/google', passport.authenticate('google-tutor',{ scope: ["profile", "email"] }))
 
-//Is Verified
-router.get('/is-verified',verifyAccessToken('tutor'),isTutorVerified)
+router.get('/auth-callback', passport.authenticate('google-tutor',{ session : false , 
+    failureRedirect : '/auth-failure' }), passportCallback);
+router.get('/auth-failure', authFailure)
 
-//Is Blocked
+/**
+ * @swagger
+ * /api/tutor/auth-load:
+ *   get:
+ *     summary: Load authenticated tutor data
+ *     tags: [Auth - Tutor]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Tutor data loaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get('/auth-load', verifyAccessToken('tutor'), readLimiter, authLoad)
 
-router.get('/isblocked',verifyAccessToken('tutor'),isBlock('tutor'))
+/**
+ * @swagger
+ * /api/tutor/is-verified:
+ *   get:
+ *     summary: Check if tutor is admin verified
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Verification status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     isVerified:
+ *                       type: boolean
+ */
+router.get('/is-verified', verifyAccessToken('tutor'), readLimiter, isTutorVerified)
 
-// CRUD routes
+/**
+ * @swagger
+ * /api/tutor/isblocked:
+ *   get:
+ *     summary: Check if tutor is blocked
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Tutor is not blocked
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+router.get('/isblocked', verifyAccessToken('tutor'), readLimiter, isBlock('tutor'))
 
-router.get('/profile',verifyAccessToken('tutor'),loadProfile)
-router.patch('/update-email',verifyAccessToken('tutor'),updateEmail('tutor'))
-router.patch('/verify-email',verifyAccessToken('tutor'),verifyEmail('tutor'))
-router.patch('/profile/update-password',verifyAccessToken('tutor'),updatePassword('tutor'))
-router.patch('/profile/update-password/re-send-otp',verifyAccessToken('tutor'),resendOtpForPasswordChange('tutor'))
-router.patch('/profile/update-password/verify-otp',verifyAccessToken('tutor'),verifyOtpForPasswordChange('tutor'))
-router.post('/update-profile',verifyAccessToken('tutor'),validateForm('tutor','profile'),updateProfile)
-router.patch('/profile/deactivate-account',verifyAccessToken('tutor'),softDeleteUser('tutor'))
+// ==================== PROFILE ROUTES ====================
 
-// request verification from admin
+/**
+ * @swagger
+ * /api/tutor/profile:
+ *   get:
+ *     summary: Get tutor profile
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Tutor'
+ */
+router.get('/profile', verifyAccessToken('tutor'), readLimiter, loadProfile)
 
-router.patch('/request-verification/:id',verifyAccessToken('tutor'),requestVerification)
+/**
+ * @swagger
+ * /api/tutor/update-email:
+ *   patch:
+ *     summary: Request email update
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: OTP sent to new email
+ */
+router.patch('/update-email', verifyAccessToken('tutor'), standardLimiter, updateEmail('tutor'))
 
-// course manage
+/**
+ * @swagger
+ * /api/tutor/verify-email:
+ *   patch:
+ *     summary: Verify email update with OTP
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Email updated successfully
+ */
+router.patch('/verify-email', verifyAccessToken('tutor'), strictLimiter, verifyEmail('tutor'))
 
-router.post('/create-course',verifyAccessToken('tutor'),createCourse)
-router.get('/courses',verifyAccessToken('tutor'),loadCourses)
-router.get('/view-course/:id',verifyAccessToken('tutor'),courseDetails)
-router.post('/update-course',verifyAccessToken('tutor'),updateCourse)
-router.post('/publish-course',verifyAccessToken('tutor'),validateForm('tutor','course'),requestPublish)
-router.delete('/delete-course/:id',verifyAccessToken('tutor'),deleteCourse)
-router.get('/check-title',verifyAccessToken('tutor'),courseTitleExist)
+/**
+ * @swagger
+ * /api/tutor/profile/update-password:
+ *   patch:
+ *     summary: Request password update
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: OTP sent for verification
+ */
+router.patch('/profile/update-password', verifyAccessToken('tutor'), standardLimiter, updatePassword('tutor'))
+router.patch('/profile/update-password/re-send-otp', verifyAccessToken('tutor'), strictLimiter, resendOtpForPasswordChange('tutor'))
+router.patch('/profile/update-password/verify-otp', verifyAccessToken('tutor'), strictLimiter, verifyOtpForPasswordChange('tutor'))
 
-// notification
+/**
+ * @swagger
+ * /api/tutor/update-profile:
+ *   post:
+ *     summary: Update tutor profile
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               bio:
+ *                 type: string
+ *               expertise:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               experience:
+ *                 type: string
+ *               profileImage:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.post('/update-profile', verifyAccessToken('tutor'), standardLimiter, validateForm('tutor','profile'), updateProfile)
 
-router.get('/load-notifications',verifyAccessToken('tutor'),loadNotifications('tutor'))
-router.post('/read-notifications',verifyAccessToken('tutor'),readNotifications)
+/**
+ * @swagger
+ * /api/tutor/profile/deactivate-account:
+ *   patch:
+ *     summary: Deactivate tutor account
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Account deactivated
+ */
+router.patch('/profile/deactivate-account', verifyAccessToken('tutor'), standardLimiter, softDeleteUser('tutor'))
 
-// wallet 
+/**
+ * @swagger
+ * /api/tutor/request-verification/{id}:
+ *   patch:
+ *     summary: Request admin verification
+ *     description: Sends verification request to admin for tutor account verification
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Verification request sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.patch('/request-verification/:id', verifyAccessToken('tutor'), standardLimiter, requestVerification)
 
-router.get('/wallet',verifyAccessToken('tutor'),loadWalletDetails('Tutor'))
+// ==================== COURSE MANAGEMENT ROUTES ====================
 
-// bank account
+/**
+ * @swagger
+ * /api/tutor/create-course:
+ *   post:
+ *     summary: Create a new course
+ *     description: Creates a new course with modules and lessons
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               formData:
+ *                 type: object
+ *                 properties:
+ *                   title:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   price:
+ *                     type: number
+ *                   level:
+ *                     type: string
+ *                     enum: [Beginner, Intermediate, Advanced]
+ *                   thumbnail:
+ *                     type: string
+ *                   modules:
+ *                     type: array
+ *                     items:
+ *                       $ref: '#/components/schemas/Module'
+ *               draft:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Course created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     courseId:
+ *                       type: string
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ */
+router.post('/create-course', verifyAccessToken('tutor'), standardLimiter, createCourse)
 
-router.get('/bank-details',verifyAccessToken('tutor'),loadExistingBankDetails)
-router.post('/bank-details',verifyAccessToken('tutor'),addBankAccountDetails)
-router.post('/withdrawal-request',verifyAccessToken('tutor'),intiateWithdrawalRequest)
-router.get('/withdrawal-request',verifyAccessToken('tutor'),loadWithdrawalRequest)
+/**
+ * @swagger
+ * /api/tutor/courses:
+ *   get:
+ *     summary: Get tutor's courses
+ *     description: Returns paginated list of courses created by the tutor
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *       - in: query
+ *         name: filter
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of courses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     courses:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/CourseBasic'
+ *                     total:
+ *                       type: integer
+ *                     currentPage:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ */
+router.get('/courses', verifyAccessToken('tutor'), readLimiter, loadCourses)
+
+/**
+ * @swagger
+ * /api/tutor/view-course/{id}:
+ *   get:
+ *     summary: Get course details
+ *     description: Returns full course details including all modules and lessons
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Course'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.get('/view-course/:id', verifyAccessToken('tutor'), readLimiter, courseDetails)
+
+/**
+ * @swagger
+ * /api/tutor/update-course:
+ *   post:
+ *     summary: Update course
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [courseId, formData]
+ *             properties:
+ *               courseId:
+ *                 type: string
+ *               formData:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Course updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.post('/update-course', verifyAccessToken('tutor'), standardLimiter, updateCourse)
+
+/**
+ * @swagger
+ * /api/tutor/publish-course:
+ *   post:
+ *     summary: Request course publication
+ *     description: Submits course for admin review and approval
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [courseId]
+ *             properties:
+ *               courseId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Publish request submitted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.post('/publish-course', verifyAccessToken('tutor'), standardLimiter, validateForm('tutor','course'), requestPublish)
+
+/**
+ * @swagger
+ * /api/tutor/delete-course/{id}:
+ *   delete:
+ *     summary: Delete course
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Course deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.delete('/delete-course/:id', verifyAccessToken('tutor'), standardLimiter, deleteCourse)
+
+/**
+ * @swagger
+ * /api/tutor/check-title:
+ *   get:
+ *     summary: Check if course title exists
+ *     tags: [Tutor - Courses]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: title
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Title availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     exists:
+ *                       type: boolean
+ */
+router.get('/check-title', verifyAccessToken('tutor'), readLimiter, courseTitleExist)
+
+// ==================== NOTIFICATION ROUTES ====================
+
+/**
+ * @swagger
+ * /api/tutor/load-notifications:
+ *   get:
+ *     summary: Get tutor notifications
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Notifications list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ */
+router.get('/load-notifications', verifyAccessToken('tutor'), readLimiter, loadNotifications('tutor'))
+
+/**
+ * @swagger
+ * /api/tutor/read-notifications:
+ *   post:
+ *     summary: Mark notifications as read
+ *     tags: [Tutor - Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Notifications marked as read
+ */
+router.post('/read-notifications', verifyAccessToken('tutor'), standardLimiter, readNotifications)
+
+// ==================== WALLET & BANK ROUTES ====================
+
+/**
+ * @swagger
+ * /api/tutor/wallet:
+ *   get:
+ *     summary: Get wallet details
+ *     description: Returns tutor wallet balance, earnings, withdrawals, and transaction history
+ *     tags: [Tutor - Wallet]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Wallet details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WalletResponse'
+ */
+router.get('/wallet', verifyAccessToken('tutor'), readLimiter, loadWalletDetails('Tutor'))
+
+/**
+ * @swagger
+ * /api/tutor/bank-details:
+ *   get:
+ *     summary: Get saved bank details
+ *     tags: [Tutor - Wallet]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Bank details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/BankDetails'
+ *       204:
+ *         description: No bank details found
+ *   post:
+ *     summary: Add/update bank details
+ *     tags: [Tutor - Wallet]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [formData]
+ *             properties:
+ *               formData:
+ *                 $ref: '#/components/schemas/BankDetails'
+ *     responses:
+ *       200:
+ *         description: Bank details saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
+router.get('/bank-details', verifyAccessToken('tutor'), readLimiter, loadExistingBankDetails)
+router.post('/bank-details', verifyAccessToken('tutor'), standardLimiter, addBankAccountDetails)
+
+/**
+ * @swagger
+ * /api/tutor/withdrawal-request:
+ *   post:
+ *     summary: Initiate withdrawal request
+ *     description: Creates a withdrawal request that will be processed by admin
+ *     tags: [Tutor - Wallet]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [formData]
+ *             properties:
+ *               formData:
+ *                 type: object
+ *                 properties:
+ *                   amount:
+ *                     type: number
+ *                     example: 5000
+ *                   method:
+ *                     type: string
+ *                     enum: [gpay, bank]
+ *     responses:
+ *       200:
+ *         description: Withdrawal request submitted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ *       400:
+ *         description: Insufficient funds or missing bank details
+ *       409:
+ *         description: Pending request already exists
+ *   get:
+ *     summary: Get pending withdrawal request
+ *     tags: [Tutor - Wallet]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Withdrawal request status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: string
+ *                   example: "Withdrawal of ₹5000 is pending"
+ *       204:
+ *         description: No pending request
+ */
+router.post('/withdrawal-request', verifyAccessToken('tutor'), standardLimiter, intiateWithdrawalRequest)
+router.get('/withdrawal-request', verifyAccessToken('tutor'), readLimiter, loadWithdrawalRequest)
 
 export default router

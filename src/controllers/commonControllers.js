@@ -12,7 +12,7 @@ import Category from "../model/category.js"
 import EnrolledCourse from "../model/enrolledCourses.js"
 import Course from "../model/course.js"
 
-const roleModals = {
+const roleModels = {
     user : User,
     tutor : Tutor,
     admin : Admin
@@ -32,7 +32,7 @@ const sortingConditions = {
 export const updateEmail = (role) =>{
     return async (req,res) => {
 
-        const db = roleModals[role]
+        const db = roleModels[role]
 
         try {
             const ID = req[role].id
@@ -80,7 +80,7 @@ export const verifyEmail = (role) =>{
         try {
             const userId = req[role].id;
 
-            const db = roleModals[role]
+            const db = roleModels[role]
 
             const {otp,email} = req.body;
             
@@ -117,7 +117,7 @@ export const sendOtp = async(req,res) =>{
     try {
         const {role, firstName, email, otpType } = req.body;
 
-        const db = roleModals[role]
+        const db = roleModels[role]
 
         const emailExist = await db.findOne({ email })
 
@@ -258,7 +258,7 @@ export const loadCourseDetails = async (req,res) => {
 export const isBlock = (role) => async (req,res) => {
     
     try {
-        const Model = roleModals[role]
+        const Model = roleModels[role]
         const id = req[role].id;
         const user = await Model.findById(id)
         if(!user)
@@ -348,7 +348,7 @@ export const loadCourses = async (req,res) => {
         .select('_id title description price rating duration hasCertification level thumbnail createdAt')
 
         if(!courses || courses.length === 0) 
-            return ResponseHandler.success(res, STRING_CONSTANTS.DATA_NOT_FOUND, HttpStatus.ok,{
+            return ResponseHandler.success(res, STRING_CONSTANTS.DATA_NOT_FOUND, HttpStatus.OK,{
                 courses: [],
                 total: 0,
                 currentPage: page,
@@ -427,7 +427,7 @@ export const getCourses = (sort) => async (req,res) => {
             .populate('tutor','name profileImage')
             .exec()
 
-            return ResponseHandler.success(res, STRING_CONSTANTS.LOADING_SUCCESS, HttpStatus.ok,trendingCourses)
+            return ResponseHandler.success(res, STRING_CONSTANTS.LOADING_SUCCESS, HttpStatus.OK,trendingCourses)
         };
 
         const courses = await Course.find({ isPublished :true })
@@ -437,11 +437,11 @@ export const getCourses = (sort) => async (req,res) => {
         .populate('tutor','firstName profileImage')
         .exec();
 
-        return ResponseHandler.success(res, STRING_CONSTANTS.LOADING_SUCCESS, HttpStatus.ok,courses)
+        return ResponseHandler.success(res, STRING_CONSTANTS.LOADING_SUCCESS, HttpStatus.OK,courses)
 
     } catch (error) {
         console.log(STRING_CONSTANTS.LOADING_ERROR,error)
-        return ResponseHandler.success(res, STRING_CONSTANTS.SERVER, HttpStatus.INTERNAL_SERVER_ERROR)
+        return ResponseHandler.error(res, STRING_CONSTANTS.SERVER, HttpStatus.INTERNAL_SERVER_ERROR)
     }
 
 }
@@ -453,7 +453,7 @@ export const updatePassword = (role) => async (req,res) => {
     try {
 
         const userId = req[role].id;
-        const db = roleModals[role]
+        const db = roleModels[role]
 
         const { currPass, newPass } = req.body;
 
@@ -470,7 +470,7 @@ export const updatePassword = (role) => async (req,res) => {
 
         user.tempPassword = hashedPassword;
 
-        user.save();
+        await user.save();
 
         const { otp } = generateOtpCode();
 
@@ -501,7 +501,7 @@ export const verifyOtpForPasswordChange = (role) => async (req,res) => {
 
         const { otp } = req.body;
         const userId = req[role].id;
-        const db = roleModals[role];
+        const db = roleModels[role];
 
         const user = await db.findById(userId)
         .select('_id password tempPassword firstName email')
@@ -533,7 +533,7 @@ export const resendOtpForPasswordChange = (role) => async (req,res) => {
     
     try {
         const userId = req[role].id;
-        const db = roleModals[role];
+        const db = roleModels[role];
 
         const user = await db.findById(userId).select('_id email firstName')
 
@@ -566,7 +566,7 @@ export const softDeleteUser = (role) => async (req,res) => {
     
     try {
         const userId = req[role].id;
-        const db = roleModals[role]
+        const db = roleModels[role]
 
         const user = await db.findById(userId)
 
